@@ -1,0 +1,12 @@
+[
+  {
+    "id": "21",
+    "targetType": "fricative",
+    "targetPhoneme": "/ð/",
+    "targetWord": "these",
+    "segment": {
+      "startSec": 0.2,
+      "endSec": 0.5
+    }
+  }
+]
