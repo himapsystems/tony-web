@@ -5,6 +5,9 @@ import numpy as np
 import matplotlib.patheffects as pe
 import os
 
+# Importa a nossa função de salvar no banco
+from database import salvar_resultado
+
 # --- CONFIGURAÇÃO VISUAL PREMIUM ---
 plt.rcParams.update({
     'font.size': 12,
@@ -22,7 +25,6 @@ def analisar_profissional(caminho_arquivo):
     print(f"🔄 Processando áudio: {caminho_arquivo}...")
     
     try:
-        # 1. Carregar Áudio e Extrair Features
         snd = parselmouth.Sound(caminho_arquivo)
         pitch = snd.to_pitch()
         intensity = snd.to_intensity()
@@ -31,7 +33,6 @@ def analisar_profissional(caminho_arquivo):
         times = np.arange(0, snd.get_total_duration(), 0.005)
         f1_raw, f2_raw, t_valid = [], [], []
 
-        # --- FILTRO SNIPER (VOGAL /ɛ/ - RED) ---
         for t in times:
             f1 = formant.get_value_at_time(1, t)
             f2 = formant.get_value_at_time(2, t)
@@ -45,7 +46,6 @@ def analisar_profissional(caminho_arquivo):
                 f2_raw.append(f2)
                 t_valid.append(t)
 
-        # 2. Matemática de Suavização
         has_vowel = False
         if len(t_valid) > 8:
             has_vowel = True
@@ -54,17 +54,24 @@ def analisar_profissional(caminho_arquivo):
             coef_f2 = np.polyfit(t_valid, f2_raw, 3)
             f1_curve = np.polyval(coef_f1, t_smooth)
             f2_curve = np.polyval(coef_f2, t_smooth)
-            f1_alvo = np.mean(f1_curve)
-            f2_alvo = np.mean(f2_curve)
+            
+            f1_alvo = float(np.mean(f1_curve))
+            f2_alvo = float(np.mean(f2_curve))
         else:
             f1_alvo, f2_alvo = 0, 0
+
+        # Calcula F0 médio
+        pitch_vals = pitch.selected_array['frequency']
+        f0_medio = float(np.mean(pitch_vals[pitch_vals > 0])) if len(pitch_vals[pitch_vals > 0]) > 0 else 0
+
+        # --- SALVAR NO SUPABASE ---
+        if has_vowel:
+            salvar_resultado("individual", f1_alvo, f2_alvo, f0_medio, os.path.basename(caminho_arquivo))
 
         # --- PLOTAGEM ---
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), dpi=300)
         plt.subplots_adjust(hspace=0.35)
 
-        # === GRÁFICO 1: MELODIA ===
-        pitch_vals = pitch.selected_array['frequency']
         pitch_vals[pitch_vals==0] = np.nan
         ax1.plot(pitch.xs(), pitch_vals, color='#4B0082', linewidth=2.5, label='F0 (Melodia)')
         ax1.fill_between(pitch.xs(), pitch_vals, 0, where=(pitch_vals>0), color='#4B0082', alpha=0.1)
@@ -72,7 +79,6 @@ def analisar_profissional(caminho_arquivo):
         ax1.set_ylabel('Frequência (Hz)')
         ax1.grid(True, linestyle=':', alpha=0.6)
 
-        # === GRÁFICO 2: MAPA DA VOGAL ===
         if has_vowel:
             ax2.plot(f2_curve, f1_curve, '-', color='#800080', linewidth=5, alpha=0.8, label='Movimento da Língua')
             ax2.scatter([f2_alvo], [f1_alvo], color='#FF0000', s=350, zorder=10, edgecolors='white', linewidth=2.5, label='Centro do Alvo')
@@ -87,7 +93,6 @@ def analisar_profissional(caminho_arquivo):
         ax2.set_ylabel('F1 - Altura (Hz)')
         ax2.grid(True, color='#DDDDDD', linestyle='--', linewidth=1)
 
-        # --- SALVAMENTO NA PASTA 'graficos' ---
         pasta_saida = "graficos"
         if not os.path.exists(pasta_saida):
             os.makedirs(pasta_saida)

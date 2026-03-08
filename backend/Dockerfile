@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir \
     imageio-ffmpeg \
     moviepy \
     matplotlib \
-    supabase
+    supabase \
+    python-dotenv
 
 COPY . .
 
